@@ -14,6 +14,7 @@ import type { Message, Profile } from './types';
 import { ArrowRight, User, Lock, GraduationCap, ArrowLeft, Loader2, AlertCircle, Mail } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PremiumModal } from './components/PremiumModal';
+import { SupportTicket } from './components/SupportTicket';
 
 function AppContent() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -22,6 +23,7 @@ function AppContent() {
   const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
   const [requestCount, setRequestCount] = useState(0);
   const [lastRequestTime, setLastRequestTime] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // 1. Initialization
   useEffect(() => {
@@ -88,6 +90,7 @@ function AppContent() {
           profile={profile}
           onOpenProfile={() => setIsProfileOpen(true)}
           onUpgrade={() => setIsPremiumModalOpen(true)}
+          onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         />
         <PremiumModal
           isOpen={isPremiumModalOpen}
@@ -113,9 +116,14 @@ function AppContent() {
               }}
               requestCount={requestCount}
               lastRequestTime={lastRequestTime}
+              isSidebarOpen={isSidebarOpen}
+              setIsSidebarOpen={setIsSidebarOpen}
             />} />
             <Route path="/admin" element={
               profile.role === 'admin' ? <AdminPanel /> : <Navigate to="/" />
+            } />
+            <Route path="/support" element={
+              profile.is_premium ? <SupportChatLayout profile={profile} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} /> : <Navigate to="/" />
             } />
           </Routes>
         </div>
@@ -337,13 +345,17 @@ const ChatLayout = ({
   onLimitReached,
   updateRequestState,
   requestCount,
-  lastRequestTime
+  lastRequestTime,
+  isSidebarOpen,
+  setIsSidebarOpen
 }: {
   profile: Profile,
   onLimitReached: () => void,
   updateRequestState: (c: number, t: string) => void,
   requestCount: number,
-  lastRequestTime: string | null
+  lastRequestTime: string | null,
+  isSidebarOpen: boolean,
+  setIsSidebarOpen: (open: boolean) => void
 }) => {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -514,6 +526,8 @@ const ChatLayout = ({
         onNewChat={handleNewChat}
         profile={profile}
         refreshKey={sidebarRefreshKey}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
       />
       <ChatArea
         messages={messages}
@@ -526,6 +540,32 @@ const ChatLayout = ({
         onToggle={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
         onSendMessage={handleSendMessage}
       />
+    </div>
+  );
+};
+
+const SupportChatLayout = ({
+  profile,
+  isSidebarOpen,
+  setIsSidebarOpen
+}: {
+  profile: Profile,
+  isSidebarOpen: boolean,
+  setIsSidebarOpen: (open: boolean) => void
+}) => {
+  return (
+    <div className="flex flex-1 relative">
+      <Sidebar
+        currentSessionId={null}
+        onSelectSession={() => { }}
+        onNewChat={() => { }}
+        profile={profile}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
+      <div className="flex-1 p-6 bg-slate-50 overflow-hidden">
+        <SupportTicket profile={profile} />
+      </div>
     </div>
   );
 };

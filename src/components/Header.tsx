@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, UserCircle } from 'lucide-react';
+import { Bot, UserCircle, Menu } from 'lucide-react';
 import type { Profile } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
 import { clsx } from 'clsx';
@@ -8,14 +8,22 @@ interface HeaderProps {
     profile: Profile | null;
     onOpenProfile: () => void;
     onUpgrade?: () => void;
+    onToggleSidebar: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ profile, onOpenProfile, onUpgrade }) => {
+export const Header: React.FC<HeaderProps> = ({ profile, onOpenProfile, onUpgrade, onToggleSidebar }) => {
     const { theme } = useTheme();
 
     return (
-        <header className={clsx("h-16 flex items-center justify-between px-6 sticky top-0 z-10 shadow-sm backdrop-blur-md border-b", theme.border, "bg-white/80")}>
-            <div className="flex items-center gap-3">
+        <header className={clsx("h-16 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-10 shadow-sm backdrop-blur-md border-b", theme.border, "bg-white/80")}>
+            <div className="flex items-center gap-2 sm:gap-3">
+                <button
+                    onClick={onToggleSidebar}
+                    className="p-2 hover:bg-slate-100 rounded-xl transition-colors md:hidden text-slate-600"
+                    title="Menu"
+                >
+                    <Menu size={24} />
+                </button>
                 <img src="/yafi.png" alt="YAFI Logo" className={clsx("w-10 h-10 rounded-xl shadow-lg object-cover", theme.shadow)} />
                 <div>
                     <h1 className="font-bold text-slate-800 text-lg leading-tight">YAFI Chatbot</h1>

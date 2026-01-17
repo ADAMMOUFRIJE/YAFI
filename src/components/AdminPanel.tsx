@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { FileText, Database, Users, Save, Trash, Plus, ArrowLeft, HelpCircle, Brain } from 'lucide-react';
 import { clsx } from 'clsx';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import { useRef } from 'react';
+import { LifeBuoy, Send } from 'lucide-react';
 
 export const AdminPanel = () => {
-    const [activeTab, setActiveTab] = useState<'knowledge' | 'members' | 'custom_qa'>('members');
+    const [activeTab, setActiveTab] = useState<'knowledge' | 'members' | 'custom_qa' | 'tickets'>('members');
 
     const TabButton = ({ id, icon: Icon, label }: { id: any, icon: any, label: string }) => (
         <button
@@ -23,22 +25,26 @@ export const AdminPanel = () => {
     );
 
     return (
-        <div className="min-h-screen bg-slate-50 p-6 font-sans">
-            <header className="mb-6 flex items-center justify-between">
+        <div className="min-h-screen bg-slate-50 p-6 font-sans mt-16">
+            <header className="mb-8 flex items-center justify-between">
                 <div>
-                    <div className="flex items-center gap-2 text-slate-400 mb-2 hover:text-emerald-600 transition-colors">
-                        <ArrowLeft size={16} />
-                        <Link to="/" className="text-sm font-semibold">Retour au Chat</Link>
-                    </div>
                     <h1 className="text-3xl font-bold text-slate-800">Admin Center</h1>
                     <p className="text-slate-500">YAFI Chatbot Configuration</p>
                 </div>
+                <Link
+                    to="/"
+                    className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 font-bold rounded-xl border border-slate-200 hover:bg-slate-50 hover:text-emerald-600 transition-all shadow-sm"
+                >
+                    <ArrowLeft size={18} />
+                    Retour au Chat
+                </Link>
             </header>
 
             <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden w-full">
                 <div className="flex border-b border-slate-200 overflow-x-auto">
                     <TabButton id="members" icon={Users} label="Membres" />
                     <TabButton id="custom_qa" icon={HelpCircle} label="Q&A Personnalisées" />
+                    <TabButton id="tickets" icon={LifeBuoy} label="Tickets Support" />
                     <TabButton id="knowledge" icon={Database} label="Base Documentaire" />
                 </div>
 
@@ -46,6 +52,7 @@ export const AdminPanel = () => {
                     {activeTab === 'knowledge' && <KnowledgeTab />}
                     {activeTab === 'custom_qa' && <CustomQATab />}
                     {activeTab === 'members' && <MembersTab />}
+                    {activeTab === 'tickets' && <TicketsTab />}
                 </div>
             </div>
         </div>
@@ -109,7 +116,7 @@ const KnowledgeTab = () => {
             </div>
 
             {/* List */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {docs.length === 0 ? (
                     <div className="text-center py-8 text-slate-400 bg-white border border-dashed border-slate-200 rounded-xl">
                         <Database size={32} className="mx-auto mb-2 opacity-50" />
@@ -368,7 +375,7 @@ const MembersTab = () => {
                 </div>
             ) : (
                 /* Member list */
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {members.map((m) => (
                         <div
                             key={m.id}
@@ -565,7 +572,7 @@ const CustomQATab = () => {
                         <p className="text-slate-400">Aucune Q&A personnalisée pour le moment.</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {qaList.map((qa) => (
                             <div key={qa.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-emerald-200 transition-colors group">
                                 <div className="flex justify-between items-start mb-4">
@@ -599,3 +606,198 @@ const CustomQATab = () => {
         </div>
     );
 }
+const TicketsTab = () => {
+    const [tickets, setTickets] = useState<any[]>([]);
+    const [selectedTickets, setSelectedTickets] = useState<string[]>([]);
+    const [activeTicket, setActiveTicket] = useState<any | null>(null);
+    const [messages, setMessages] = useState<any[]>([]);
+    const [newMessage, setNewMessage] = useState('');
+    const [loading, setLoading] = useState(false);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        fetchTickets();
+
+        // Subscribe to NEW tickets
+        const ticketSub = supabase
+            .channel('admin_tickets')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tickets' }, (payload) => {
+                setTickets(prev => [payload.new, ...prev]);
+            })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tickets' }, (payload) => {
+                setTickets(prev => prev.map(t => t.id === payload.new.id ? payload.new : t));
+            })
+            .subscribe();
+
+        return () => { supabase.removeChannel(ticketSub); };
+    }, []);
+
+    useEffect(() => {
+        if (activeTicket) {
+            fetchMessages(activeTicket.id);
+            const msgSub = supabase
+                .channel(`admin_msg_${activeTicket.id}`)
+                .on('postgres_changes', {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'ticket_messages',
+                    filter: `ticket_id=eq.${activeTicket.id}`
+                }, (payload) => {
+                    setMessages(prev => [...prev, payload.new]);
+                })
+                .subscribe();
+            return () => { supabase.removeChannel(msgSub); };
+        }
+    }, [activeTicket]);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
+
+    const fetchTickets = async () => {
+        const { data } = await supabase.from('tickets').select('*, users(full_name, email)').order('created_at', { ascending: false });
+        if (data) setTickets(data);
+    };
+
+    const fetchMessages = async (id: string) => {
+        const { data } = await supabase.from('ticket_messages').select('*').eq('ticket_id', id).order('created_at', { ascending: true });
+        if (data) setMessages(data);
+    };
+
+    const handleSendMessage = async () => {
+        if (!newMessage.trim() || !activeTicket) return;
+        const msg = newMessage;
+        setNewMessage('');
+
+        const { error } = await supabase.from('ticket_messages').insert({
+            ticket_id: activeTicket.id,
+            sender_id: 'admin_placeholder', // You should replace this with real admin ID check if possible
+            content: msg
+        });
+        if (error) console.error(error);
+    };
+
+    const toggleSelect = (id: string) => {
+        setSelectedTickets(prev => prev.includes(id) ? prev.filter(tid => tid !== id) : [...prev, id]);
+    };
+
+    const selectAll = () => {
+        if (selectedTickets.length === tickets.length) setSelectedTickets([]);
+        else setSelectedTickets(tickets.map(t => t.id));
+    };
+
+    const closeSelected = async () => {
+        if (selectedTickets.length === 0) return;
+        setLoading(true);
+        const { error } = await supabase.from('tickets').update({ status: 'closed' }).in('id', selectedTickets);
+        if (!error) {
+            setTickets(tickets.map(t => selectedTickets.includes(t.id) ? { ...t, status: 'closed' } : t));
+            setSelectedTickets([]);
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div>
+            <h2 className="text-xl font-bold mb-6">Tickets Support</h2>
+
+            {/* Back button if ticket is selected */}
+            {activeTicket && (
+                <button
+                    onClick={() => setActiveTicket(null)}
+                    className="mb-4 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium flex items-center gap-2"
+                >
+                    <ArrowLeft size={16} /> Retour à la liste
+                </button>
+            )}
+
+            {activeTicket ? (
+                /* Ticket Detail View */
+                <div className="bg-white rounded-3xl border border-slate-200 flex flex-col h-[600px] overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                        <div>
+                            <h4 className="font-bold text-slate-800">{activeTicket.subject}</h4>
+                            <p className="text-xs text-slate-500">Par {activeTicket.users?.full_name} ({activeTicket.users?.email})</p>
+                        </div>
+                        <button
+                            onClick={() => {
+                                supabase.from('tickets').update({ status: 'closed' }).eq('id', activeTicket.id).then(() => fetchTickets());
+                                setActiveTicket({ ...activeTicket, status: 'closed' });
+                            }}
+                            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50"
+                        >
+                            Fermer le Ticket
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                        {messages.map(m => (
+                            <div key={m.id} className={clsx("flex flex-col max-w-[80%]", m.sender_id === activeTicket.user_id ? "items-start" : "ml-auto items-end")}>
+                                <div className={clsx(
+                                    "p-3 rounded-2xl text-sm",
+                                    m.sender_id === activeTicket.user_id ? "bg-slate-100 text-slate-800 rounded-tl-none" : "bg-emerald-600 text-white rounded-tr-none"
+                                )}>
+                                    {m.content}
+                                </div>
+                                <span className="text-[10px] text-slate-400 mt-1">{new Date(m.created_at).toLocaleTimeString()}</span>
+                            </div>
+                        ))}
+                        <div ref={messagesEndRef} />
+                    </div>
+
+                    <div className="p-4 border-t border-slate-100 flex gap-2">
+                        <input
+                            value={newMessage}
+                            onChange={e => setNewMessage(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
+                            placeholder="Répondre..."
+                            className="flex-1 p-3 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                        />
+                        <button onClick={handleSendMessage} className="p-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700">
+                            <Send size={18} />
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                /* Ticket Grid List */
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {tickets.map(t => (
+                        <div
+                            key={t.id}
+                            onClick={() => setActiveTicket(t)}
+                            className={clsx(
+                                "p-5 bg-white border border-slate-200 rounded-2xl hover:shadow-md hover:border-emerald-200 transition-all cursor-pointer group flex flex-col justify-between h-48"
+                            )}
+                        >
+                            <div>
+                                <div className="flex justify-between items-start mb-3">
+                                    <span className={clsx(
+                                        "text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wide",
+                                        t.status === 'open' ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                                    )}>
+                                        {t.status === 'open' ? 'Ouvert' : 'Fermé'}
+                                    </span>
+                                    <span className="text-xs text-slate-400">{new Date(t.created_at).toLocaleDateString()}</span>
+                                </div>
+                                <h4 className="font-bold text-slate-800 mb-1 line-clamp-2">{t.subject}</h4>
+                                <p className="text-sm text-slate-500 truncate">{t.users?.full_name}</p>
+                            </div>
+
+                            <div className="flex justify-end">
+                                <span className="text-xs font-bold text-emerald-600 group-hover:underline flex items-center gap-1">
+                                    Voir la discussion <ArrowLeft size={14} className="rotate-180" />
+                                </span>
+                            </div>
+                        </div>
+                    ))}
+                    {tickets.length === 0 && (
+                        <div className="col-span-full text-center py-12 text-slate-400 border border-dashed border-slate-200 rounded-2xl">
+                            <LifeBuoy size={48} className="mx-auto mb-4 opacity-20" />
+                            <p>Aucun ticket de support.</p>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};

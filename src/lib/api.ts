@@ -1,6 +1,6 @@
 import type { Message } from '../types';
 
-const PYTHON_API_URL = import.meta.env.VITE_PYTHON_API_URL || 'http://localhost:5000';
+const PYTHON_API_URL = import.meta.env.VITE_PYTHON_API_URL || '';
 
 export const apiService = {
     async sendMessage(history: Message[], newMessage: string, userId: string) {
