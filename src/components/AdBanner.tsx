@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { X, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 
 export const AdBanner = () => {
     // Simulate generic Google AdSense banner style

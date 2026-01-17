@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { FileText, Database, Users, Save, Trash, Plus, ArrowLeft, HelpCircle, Brain } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -67,7 +67,7 @@ const KnowledgeTab = () => {
 
     const handleAdd = async () => {
         if (!newDocName || !newDocContent) return;
-        const { data, error } = await supabase.from('knowledge_base').insert({
+        const { data } = await supabase.from('knowledge_base').insert({
             name: newDocName,
             content: newDocContent,
             type: 'text/plain'
