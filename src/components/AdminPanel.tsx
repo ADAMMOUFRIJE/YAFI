@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { FileText, Database, Brain, Users, Save, Trash, Plus, ArrowLeft } from 'lucide-react';
+import { FileText, Database, Users, Save, Trash, Plus, ArrowLeft, HelpCircle, Brain } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Link } from 'react-router-dom';
 
 export const AdminPanel = () => {
-    const [activeTab, setActiveTab] = useState<'instructions' | 'knowledge' | 'memory' | 'members'>('instructions');
+    const [activeTab, setActiveTab] = useState<'knowledge' | 'members' | 'custom_qa'>('members');
 
     const TabButton = ({ id, icon: Icon, label }: { id: any, icon: any, label: string }) => (
         <button
             onClick={() => setActiveTab(id)}
             className={clsx(
-                "flex items-center gap-2 px-6 py-4 font-medium transition-all border-b-2",
+                "flex items-center gap-2 px-6 py-4 font-medium transition-all border-b-2 whitespace-nowrap",
                 activeTab === id
                     ? "border-emerald-600 text-emerald-800 bg-emerald-50/50"
                     : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50"
@@ -24,60 +24,33 @@ export const AdminPanel = () => {
 
     return (
         <div className="min-h-screen bg-slate-50 p-6 font-sans">
-            <header className="mb-8 flex items-center justify-between">
+            <header className="mb-6 flex items-center justify-between">
                 <div>
                     <div className="flex items-center gap-2 text-slate-400 mb-2 hover:text-emerald-600 transition-colors">
                         <ArrowLeft size={16} />
                         <Link to="/" className="text-sm font-semibold">Retour au Chat</Link>
                     </div>
                     <h1 className="text-3xl font-bold text-slate-800">Admin Center</h1>
-                    <p className="text-slate-500">PFE Chatbot Configuration</p>
+                    <p className="text-slate-500">YAFI Chatbot Configuration</p>
                 </div>
             </header>
 
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden w-full">
                 <div className="flex border-b border-slate-200 overflow-x-auto">
-                    <TabButton id="instructions" icon={FileText} label="Instructions" />
-                    <TabButton id="knowledge" icon={Database} label="Base Documentaire" />
-                    <TabButton id="memory" icon={Brain} label="Mémoire Apprise" />
                     <TabButton id="members" icon={Users} label="Membres" />
+                    <TabButton id="custom_qa" icon={HelpCircle} label="Q&A Personnalisées" />
+                    <TabButton id="knowledge" icon={Database} label="Base Documentaire" />
                 </div>
 
-                <div className="p-8 min-h-[500px]">
-                    {activeTab === 'instructions' && <InstructionsTab />}
+                <div className="p-8 h-[calc(100vh-220px)] overflow-y-auto">
                     {activeTab === 'knowledge' && <KnowledgeTab />}
-                    {activeTab === 'memory' && <MemoryTab />}
+                    {activeTab === 'custom_qa' && <CustomQATab />}
                     {activeTab === 'members' && <MembersTab />}
                 </div>
             </div>
         </div>
     );
 };
-
-const InstructionsTab = () => {
-    // System Prompts could be stored in Knowledge Base as a special type for MVP
-    const [prompt, setPrompt] = useState(`Tu es l'assistant PFE de l'EST Safi. Ton identité est "Emerald AI"...`);
-
-    const handleSave = () => {
-        alert("Prompt système sauvegardé (Simulation PFE)");
-        // In real app, save to a 'settings' table.
-    };
-
-    return (
-        <div className="max-w-3xl">
-            <h2 className="text-xl font-bold mb-4">System Prompt Global</h2>
-            <p className="text-sm text-slate-500 mb-4">Ce prompt définit la personnalité et les règles strictes de l'IA.</p>
-            <textarea
-                className="w-full h-64 p-4 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-mono text-sm leading-relaxed"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-            />
-            <button onClick={handleSave} className="mt-4 px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all">
-                <Save size={18} /> Sauvegarder
-            </button>
-        </div>
-    )
-}
 
 const KnowledgeTab = () => {
     const [docs, setDocs] = useState<any[]>([]);
@@ -119,7 +92,7 @@ const KnowledgeTab = () => {
                 <div className="space-y-3">
                     <input
                         className="w-full p-3 rounded-lg border border-slate-300"
-                        placeholder="Titre du document (ex: Guide PFE 2024)"
+                        placeholder="Titre du document (ex: Guide YAFI 2024)"
                         value={newDocName}
                         onChange={e => setNewDocName(e.target.value)}
                     />
@@ -136,7 +109,7 @@ const KnowledgeTab = () => {
             </div>
 
             {/* List */}
-            <div className="grid gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {docs.length === 0 ? (
                     <div className="text-center py-8 text-slate-400 bg-white border border-dashed border-slate-200 rounded-xl">
                         <Database size={32} className="mx-auto mb-2 opacity-50" />
@@ -156,35 +129,6 @@ const KnowledgeTab = () => {
                         <button className="text-slate-300 hover:text-red-500 transition-colors p-2">
                             <Trash size={18} />
                         </button>
-                    </div>
-                ))}
-            </div>
-        </div>
-    )
-}
-
-const MemoryTab = () => {
-    const [facts, setFacts] = useState<any[]>([]);
-
-    useEffect(() => {
-        const fetchFacts = async () => {
-            const { data } = await supabase.from('learning_base').select('*').order('created_at', { ascending: false });
-            if (data) setFacts(data);
-        };
-        fetchFacts();
-    }, []);
-
-    return (
-        <div>
-            <h2 className="text-xl font-bold mb-6">Mémoire Active (Facts)</h2>
-            <div className="space-y-3">
-                {facts.length === 0 ? <p className="text-slate-400">Aucun fait mémorisé.</p> : facts.map(f => (
-                    <div key={f.id} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-xl shadow-sm">
-                        <div>
-                            <p className="font-medium text-slate-800">{f.fact}</p>
-                            <p className="text-xs text-slate-400">User: {f.user_id}</p>
-                        </div>
-                        <button className="text-red-400 hover:text-red-600 p-2"><Trash size={18} /></button>
                     </div>
                 ))}
             </div>
@@ -245,6 +189,25 @@ const MembersTab = () => {
         };
         loadMemberData();
     }, [selectedMember]);
+
+    const togglePremium = async (member: any) => {
+        const newValue = !member.is_premium;
+        const { error } = await supabase
+            .from('users')
+            .update({ is_premium: newValue })
+            .eq('id', member.id);
+
+        if (error) {
+            console.error('Error updating premium status:', error);
+            alert('Erreur: ' + error.message);
+        } else {
+            // Update local state
+            setMembers(members.map(m => m.id === member.id ? { ...m, is_premium: newValue } : m));
+            if (selectedMember && selectedMember.id === member.id) {
+                setSelectedMember({ ...selectedMember, is_premium: newValue });
+            }
+        }
+    };
 
     // Extract profile info from messages
     const extractProfileInfo = (messages: any[]) => {
@@ -323,8 +286,24 @@ const MembersTab = () => {
                                 )}>
                                     {selectedMember.role === 'admin' ? 'Administrateur' : 'Utilisateur'}
                                 </span>
+                                {selectedMember.is_premium && (
+                                    <span className="ml-2 text-xs px-3 py-1 rounded-full font-bold bg-amber-100 text-amber-700 inline-block border border-amber-200">
+                                        👑 PREMIUM
+                                    </span>
+                                )}
                             </div>
                         </div>
+                        <button
+                            onClick={() => togglePremium(selectedMember)}
+                            className={clsx(
+                                "px-4 py-2 rounded-xl font-bold text-sm transition-all shadow-sm",
+                                selectedMember.is_premium
+                                    ? "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+                                    : "bg-amber-400 text-white hover:bg-amber-500 shadow-amber-200"
+                            )}
+                        >
+                            {selectedMember.is_premium ? 'Retirer Premium' : 'Donner Premium 👑'}
+                        </button>
                     </div>
 
                     {/* Profile info extracted from conversations */}
@@ -389,7 +368,7 @@ const MembersTab = () => {
                 </div>
             ) : (
                 /* Member list */
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {members.map((m) => (
                         <div
                             key={m.id}
@@ -411,12 +390,212 @@ const MembersTab = () => {
                                 )}>
                                     {m.role === 'admin' ? 'Administrateur' : 'Utilisateur'}
                                 </span>
+                                {m.is_premium && (
+                                    <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700 inline-block border border-amber-200">
+                                        👑 PREMIUM
+                                    </span>
+                                )}
                             </div>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    togglePremium(m);
+                                }}
+                                className={clsx(
+                                    "p-2 rounded-lg transition-colors",
+                                    m.is_premium ? "text-amber-500 hover:bg-amber-50" : "text-slate-300 hover:text-amber-400 hover:bg-slate-50"
+                                )}
+                                title={m.is_premium ? "Retirer Premium" : "Donner Premium"}
+                            >
+                                <Users size={18} className={m.is_premium ? "fill-amber-500" : ""} />
+                            </button>
                             <ArrowLeft size={16} className="text-slate-300 rotate-180" />
                         </div>
                     ))}
                 </div>
             )}
         </div>
-    )
+    );
+};
+
+const CustomQATab = () => {
+    const [qaList, setQaList] = useState<any[]>([]);
+    const [questions, setQuestions] = useState<string[]>(['']);
+    const [answer, setAnswer] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        fetchQA();
+    }, []);
+
+    const fetchQA = async () => {
+        const { data } = await supabase.from('custom_qa').select('*').order('created_at', { ascending: false });
+        if (data) setQaList(data);
+    };
+
+    const handleAddQuestionField = () => {
+        setQuestions([...questions, '']);
+    };
+
+    const handleRemoveQuestionField = (index: number) => {
+        if (questions.length > 1) {
+            const newQuestions = [...questions];
+            newQuestions.splice(index, 1);
+            setQuestions(newQuestions);
+        }
+    };
+
+    const handleQuestionChange = (index: number, value: string) => {
+        const newQuestions = [...questions];
+        newQuestions[index] = value;
+        setQuestions(newQuestions);
+    };
+
+    const handlePublish = async () => {
+        const validQuestions = questions.filter(q => q.trim() !== '');
+        if (validQuestions.length === 0 || !answer.trim()) {
+            alert("Veuillez remplir au moins une question et une réponse.");
+            return;
+        }
+
+        setLoading(true);
+        const { data, error } = await supabase.from('custom_qa').insert({
+            questions: validQuestions,
+            answer: answer.trim()
+        }).select();
+
+        setLoading(false);
+
+        if (error) {
+            alert("Erreur lors de la publication: " + error.message);
+        } else if (data) {
+            setQaList([data[0], ...qaList]);
+            setQuestions(['']);
+            setAnswer('');
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm("Voulez-vous vraiment supprimer cette Q&A ?")) return;
+
+        const { error } = await supabase.from('custom_qa').delete().eq('id', id);
+        if (!error) {
+            setQaList(qaList.filter(item => item.id !== id));
+        } else {
+            alert("Erreur lors de la suppression.");
+        }
+    };
+
+    return (
+        <div className="space-y-8">
+            <div className="flex justify-between items-center">
+                <div>
+                    <h2 className="text-xl font-bold text-slate-800">Questions-Réponses Personnalisées</h2>
+                    <p className="text-sm text-slate-500">Ajoutez des réponses spécifiques pour des questions attendues.</p>
+                </div>
+            </div>
+
+            {/* Form */}
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                <div className="space-y-6">
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-3">
+                            Questions attendues (cliquez sur + pour ajouter des variantes)
+                        </label>
+                        <div className="space-y-3">
+                            {questions.map((q, index) => (
+                                <div key={index} className="flex gap-2">
+                                    <input
+                                        className="flex-1 p-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                                        placeholder={`Question ${index + 1} (ex: Quels sont les frais ?)`}
+                                        value={q}
+                                        onChange={e => handleQuestionChange(index, e.target.value)}
+                                    />
+                                    {questions.length > 1 && (
+                                        <button
+                                            onClick={() => handleRemoveQuestionField(index)}
+                                            className="p-3 text-slate-400 hover:text-red-500 transition-colors"
+                                        >
+                                            <Trash size={18} />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                            <button
+                                onClick={handleAddQuestionField}
+                                className="flex items-center gap-2 text-sm font-bold text-emerald-600 hover:text-emerald-700 transition-colors px-1"
+                            >
+                                <Plus size={16} /> Ajouter une autre variante de question
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">Réponse à donner</label>
+                        <textarea
+                            className="w-full p-4 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 h-32"
+                            placeholder="Écrivez la réponse structurée ici..."
+                            value={answer}
+                            onChange={e => setAnswer(e.target.value)}
+                        />
+                    </div>
+
+                    <button
+                        onClick={handlePublish}
+                        disabled={loading}
+                        className={clsx(
+                            "w-full py-4 rounded-xl font-bold text-white transition-all flex items-center justify-center gap-2 shadow-lg",
+                            loading ? "bg-slate-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200"
+                        )}
+                    >
+                        {loading ? "Publication..." : <><Save size={18} /> Publier la Q&A</>}
+                    </button>
+                </div>
+            </div>
+
+            {/* List */}
+            <div className="space-y-4">
+                <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                    <Database size={18} /> Liste des Q&A Personnalisées ({qaList.length})
+                </h3>
+
+                {qaList.length === 0 ? (
+                    <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200">
+                        <HelpCircle size={48} className="mx-auto mb-3 text-slate-200" />
+                        <p className="text-slate-400">Aucune Q&A personnalisée pour le moment.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {qaList.map((qa) => (
+                            <div key={qa.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-emerald-200 transition-colors group">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="space-y-1">
+                                        {qa.questions.map((q: string, idx: number) => (
+                                            <div key={idx} className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                                {q}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <button
+                                        onClick={() => handleDelete(qa.id)}
+                                        className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                    >
+                                        <Trash size={18} />
+                                    </button>
+                                </div>
+                                <div className="p-4 bg-slate-50 rounded-xl text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+                                    {qa.answer}
+                                </div>
+                                <div className="mt-3 flex justify-between items-center text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+                                    <span>{qa.questions.length} question(s) configurée(s)</span>
+                                    <span>Ajouté le {new Date(qa.created_at).toLocaleDateString()}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
 }

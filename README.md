@@ -71,3 +71,33 @@ export default defineConfig([
   },
 ])
 ```
+
+## How to Start the Project
+
+### 1. Backend (Python/Flask)
+The backend runs on port 5000 and requires Python + SWI-Prolog.
+
+1.  **Install dependencies**:
+    ```bash
+    pip install -r requirements.txt
+    ```
+2.  **Start the server**:
+    ```bash
+    python backend/server.py
+    ```
+    *Ensure `swipl` (SWI-Prolog) is installed and in your PATH if required by `pyswip`.*
+
+### 2. Frontend (React/Vite)
+The frontend runs on `http://localhost:5173` (by default).
+
+1.  **Install dependencies**:
+    ```bash
+    npm install
+    ```
+2.  **Start the development server**:
+    ```bash
+    npm run dev
+    ```
+
+**Note**: You need to run both the backend and frontend terminals simultaneously.
+

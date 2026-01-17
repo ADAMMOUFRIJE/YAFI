@@ -6,21 +6,6 @@ import time
 import unicodedata
 import re
 import sys
-import os
-from dotenv import load_dotenv
-try:
-    from supabase import create_client, Client
-except ImportError:
-    # Fallback if installation is not yet finished in this shell session
-    create_client, Client = None, None
-
-# Load environment variables
-load_dotenv()
-
-# Init Supabase
-supabase_url = os.environ.get("VITE_SUPABASE_URL")
-supabase_key = os.environ.get("VITE_SUPABASE_ANON_KEY")
-supabase = create_client(supabase_url, supabase_key) if (create_client and supabase_url and supabase_key) else None
 
 # Force UTF-8 encoding for Windows terminals
 sys.stdout.reconfigure(encoding='utf-8')
@@ -83,23 +68,8 @@ def chat():
     
     # Normaliser le message utilisateur
     user_message_normalized = normalize_text(user_message)
-    # Update logic to use normalized message for matching!
-    # Wait, the code uses 'user_message' variable for checks, but 'normalize_text' returns 'user_message_normalized'.
-    # Does the code use 'user_message' (original) or 'user_message_normalized'?
-    # Line 34: user_message = ...
-    # Line 70: user_message_normalized = ...
-    # Lines 114+: if user_message in ...
     
-    # CRITICAL BUG FOUND: The code computes 'user_message_normalized' but CONTINUES TO USE 'user_message' (raw input) for all checks!
-    # And 'user_message' might have accents or casing issues (though it is lower() at line 34).
-    # 'normalize_text' removes accents (NFD).
-    # If user types "médecine", user_message has "médecine".
-    # But checks look for "concours" (ok) or "medecine" (without accent).
-    # If the user typed "concours" with an accent (unlikely) or something?
-    # "concours" is standard.
-    
-    # However, if I fix the variable usage, it should help.
-    user_message = user_message_normalized
+    response_text = "Je n'ai pas compris. Posez une question sur l'orientation (ex: 'Que faire avec un Bac PC ?', 'Conseils révision', 'Médecine avec 11 ?')."
 
     # Helper pour l'encodage (PySwip retourne parfois du Mojibake)
     def clean_text(text):
@@ -138,27 +108,7 @@ def chat():
         
         return cleaned
 
-    # --- CUSTOM Q&A (Priorité ABSOLUE) ---
-    if supabase:
-        try:
-            qa_data = supabase.table('custom_qa').select('*').execute()
-            if qa_data.data:
-                for qa in qa_data.data:
-                    questions = qa.get('questions', [])
-                    answer = qa.get('answer', '')
-                    for q in questions:
-                        q_norm = normalize_text(q.lower())
-                        # Match si la question stockée est dans le message utilisateur ou vice versa
-                        if q_norm in user_message_normalized or user_message_normalized in q_norm:
-                            print(f"✓ Custom Q&A Match: '{q}' -> Réponse personnalisée envoyée")
-                            return jsonify({"response": answer})
-        except Exception as e_qa:
-            print(f"⚠ Erreur Custom Q&A: {e_qa}")
-
     try:
-        # Initialize response_text with a default value to prevent UnboundLocalError
-        response_text = "Je n'ai pas compris votre question. Pouvez-vous la reformuler ?"
-        
         # --- ABBREVIATIONS & MOTS COURTS (Très Haute Priorité) ---
         # CV / Curriculum
         if user_message in ['cv', 'c v', 'curriculum']:
@@ -253,33 +203,6 @@ def chat():
         # Plaintes / Erreurs
         if any(keyword in user_message for keyword in ['arret', 'arrête', 'stop', 'meme reponse', 'même réponse', 'bug', 'erreur']):
             return jsonify({"response": "Désolé si ma réponse n'était pas claire ! 😅\n\nEssayez de reformuler votre question de manière plus précise, par exemple :\n- 'Que faire avec un Bac PC ?'\n- 'Médecine avec 13 de moyenne'\n- 'Prix EMSI'\n- 'Débouchés informatique'\n\nJe suis là pour vous aider ! 💪"})
-
-        # --- PRIORITY CHECK: CONCOURS & EXAMENS ---
-        if "concours" in user_message or "examen" in user_message:
-             concours_map = {
-                 'medecine': ['médecine', 'medecine', 'pharmacie', 'dentaire'],
-                 'ingenierie_public': ['ingénierie', 'ingenieur', 'ensa', 'emi', 'ensias', 'public'],
-                 'ecoles_privees': ['privé', 'prive', 'emsi', 'uir', 'um6p', 'hem'],
-                 'commerce': ['commerce', 'gestion', 'encg', 'iscae', 'esca', 'business']
-             }
-             found_concours = None
-             for conc_key, keywords in concours_map.items():
-                 if any(k in user_message for k in keywords):
-                     found_concours = conc_key
-                     break
-            
-             if found_concours:
-                 q = f"get_concours_admission({found_concours}, E, C)"
-                 res = list(prolog.query(q))
-                 if res:
-                     r = res[0]
-                     display_name = found_concours.replace('_', ' ').title()
-                     if found_concours == 'medecine': display_name = 'Médecine'
-                     return jsonify({"response": f"📝 **Concours {display_name}** :\n📋 {clean_text(r['E'])}\n{clean_text(r['C'])}"})
-                 else:
-                     return jsonify({"response": f"Je n'ai pas d'infos sur le concours '{found_concours}'."})
-             else:
-                 return jsonify({"response": "📝 **Concours** : Médecine (QCM Sciences), Ingénierie (Maths/Physique), Commerce (TAFEM)... Précisez une filière."})
 
         # --- 4. INFOS PRATIQUES (Prioritaire) ---
         
@@ -467,97 +390,6 @@ def chat():
                     response_text = f"Je n'ai pas de chiffre précis pour '{found_key}'."
             else:
                  response_text = "📊 **Le Saviez-vous ?**\n- Il y a 1.25 million d'étudiants au Maroc.\n- La sélectivité est rude : 1 place pour 22 candidats en Médecine !"
-
-        # --- 1.5 OÙ ÉTUDIER [DOMAINE] (Nouveau Handler) ---
-        elif ("où" in user_message or "ou" in user_message) and ("étudier" in user_message or "etudier" in user_message or "faire" in user_message):
-            # Map keywords to domains/filières
-            domaines_map = {
-                'architecture': ['architecture', 'architecte', 'archi', 'urbanisme'],
-                'informatique': ['informatique', 'info', 'it', 'développement', 'programmation', 'cyber', 'data'],
-                'médecine': ['médecine', 'medecine', 'pharmacie', 'dentaire', 'santé'],
-                'ingénierie': ['ingénierie', 'ingenieur', 'génie', 'engineering'],
-                'commerce': ['commerce', 'gestion', 'management', 'business', 'marketing'],
-                'droit': ['droit', 'juridique', 'avocat'],
-                'lettres': ['lettres', 'littérature', 'langues', 'philosophie'],
-                'design': ['design', 'graphisme', 'beaux-arts', 'arts']
-            }
-            
-            found_domaine = None
-            for domaine, keywords in domaines_map.items():
-                if any(kw in user_message for kw in keywords):
-                    found_domaine = domaine
-                    break
-            
-            if found_domaine:
-                # Query Prolog for schools offering this domain
-                ecoles_found = []
-                
-                # Try filiere/6 predicate
-                try:
-                    # Search by filiere name
-                    all_filieres = list(prolog.query("filiere(Bac, Secteur, Filiere, Etablissement, Duree, Diplome)"))
-                    for f in all_filieres:
-                        filiere_name = clean_text(f['Filiere']).lower()
-                        etablissement = clean_text(f['Etablissement'])
-                        
-                        # Check if domain matches filiere
-                        if found_domaine == 'architecture' and 'architecture' in filiere_name:
-                            if etablissement not in ecoles_found:
-                                ecoles_found.append(etablissement)
-                        elif found_domaine == 'informatique' and any(kw in filiere_name for kw in ['informatique', 'info', 'data', 'cyber', 'réseaux']):
-                            if etablissement not in ecoles_found:
-                                ecoles_found.append(etablissement)
-                        elif found_domaine == 'médecine' and any(kw in filiere_name for kw in ['médecine', 'medecine', 'pharmacie', 'dentaire']):
-                            if etablissement not in ecoles_found:
-                                ecoles_found.append(etablissement)
-                        elif found_domaine == 'ingénierie' and any(kw in filiere_name for kw in ['ingénieur', 'génie', 'engineering']):
-                            if etablissement not in ecoles_found:
-                                ecoles_found.append(etablissement)
-                        elif found_domaine == 'commerce' and any(kw in filiere_name for kw in ['commerce', 'gestion', 'management', 'business']):
-                            if etablissement not in ecoles_found:
-                                ecoles_found.append(etablissement)
-                        elif found_domaine == 'droit' and 'droit' in filiere_name:
-                            if etablissement not in ecoles_found:
-                                ecoles_found.append(etablissement)
-                        elif found_domaine == 'lettres' and any(kw in filiere_name for kw in ['lettres', 'langue', 'littérature']):
-                            if etablissement not in ecoles_found:
-                                ecoles_found.append(etablissement)
-                        elif found_domaine == 'design' and any(kw in filiere_name for kw in ['design', 'arts', 'beaux']):
-                            if etablissement not in ecoles_found:
-                                ecoles_found.append(etablissement)
-                except Exception as e:
-                    print(f"Error querying filiere: {e}")
-                
-                # Build response
-                if ecoles_found:
-                    display_name = found_domaine.capitalize()
-                    if found_domaine == 'médecine':
-                        display_name = 'Médecine'
-                    elif found_domaine == 'ingénierie':
-                        display_name = 'Ingénierie'
-                    
-                    response_text = f"🏫 **Où étudier {display_name} au Maroc ?**\n\n"
-                    response_text += f"Voici les établissements qui proposent des formations en {display_name} :\n\n"
-                    
-                    # Group and deduplicate
-                    unique_ecoles = sorted(list(set(ecoles_found)))
-                    for ecole in unique_ecoles[:15]:  # Limit to 15 to avoid too long response
-                        response_text += f"• {ecole}\n"
-                    
-                    if len(unique_ecoles) > 15:
-                        response_text += f"\n... et {len(unique_ecoles) - 15} autres établissements.\n"
-                    
-                    # Add specific advice based on domain
-                    if found_domaine == 'architecture':
-                        response_text += "\n💡 **Conseil** : L'ENA (École Nationale d'Architecture) est l'établissement de référence. Concours sélectif requis."
-                    elif found_domaine == 'informatique':
-                        response_text += "\n💡 **Conseil** : Beaucoup d'options publiques (ENSA, FST, EST) et privées (EMSI, SUPINFO)."
-                    elif found_domaine == 'médecine':
-                        response_text += "\n💡 **Conseil** : Très sélectif. Moyenne ≥ 14-15 recommandée. Bac scientifique obligatoire."
-                else:
-                    response_text = f"Je n'ai pas trouvé d'établissements spécifiques pour {found_domaine} dans ma base. Essayez de reformuler ou demandez-moi des écoles spécifiques (ex: 'ENSA', 'ENA')."
-            else:
-                response_text = "🎓 **Où étudier ?**\n\nPrécisez un domaine pour que je vous aide :\n• Architecture\n• Informatique\n• Médecine\n• Ingénierie\n• Commerce\n• Droit\n• Design\n\nExemple : 'Où étudier l'informatique au Maroc ?'"
 
         # --- 2. GEOGRAPHIE & VILLES (Priorité Haute) ---- Inclut Ville Chance
         elif ("où" in user_message or "ville" in user_message or "trouve" in user_message or "localisation" in user_message or "campus" in user_message or "école" in user_message or "ecole" in user_message or "université" in user_message or "concurrence" in user_message or "chance" in user_message or "opportunité" in user_message or any(v in user_message for v in ['rabat', 'casa', 'marrakech', 'agadir', 'fès', 'meknès', 'tanger', 'oujda', 'safi', 'khouribga', 'el jadida', 'tetouan'])) and not "avantage" in user_message and not "inconvénient" in user_message:
@@ -941,7 +773,7 @@ def chat():
 
 
         # --- 6.3 CONCOURS & EXAMENS D'ADMISSION (Nouveau) ---
-        elif "concours" in user_message or "examen" in user_message or "admission" in user_message or "test" in user_message or "entretien" in user_message or "preparer" in user_message or "preparation" in user_message:
+        elif "concours" in user_message or "examen" in user_message or "admission" in user_message or "test" in user_message or "entretien" in user_message:
             
             # Map keywords to exam types
             concours_map = {

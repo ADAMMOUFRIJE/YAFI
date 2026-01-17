@@ -1,19 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { AdminPanel } from './components/AdminPanel';
 import { LandingPage } from './components/LandingPage';
+import { ProfileModal } from './components/ProfileModal';
+import { SuggestionsSidebar } from './components/SuggestionsSidebar';
 import { apiService } from './lib/api';
 import { supabase } from './lib/supabase';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import type { Message, Profile } from './types';
 import { ArrowRight, User, Lock, GraduationCap, ArrowLeft, Loader2, AlertCircle, Mail } from 'lucide-react';
 import { clsx } from 'clsx';
+import { PremiumModal } from './components/PremiumModal';
 
-function App() {
+function AppContent() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [showLanding, setShowLanding] = useState(true);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+  const [requestCount, setRequestCount] = useState(0);
+  const [lastRequestTime, setLastRequestTime] = useState<string | null>(null);
 
   // 1. Initialization
   useEffect(() => {
@@ -23,7 +31,7 @@ function App() {
       setProfile(parsedUser);
       setShowLanding(false);
 
-      // RE-VERIFY & REFRESH DATA FROM DB (Critical for role updates)
+      // RE-VERIFY & REFRESH DATA FROM DB
       if (parsedUser.email) {
         supabase.from('users').select('*').eq('email', parsedUser.email).single().then(({ data, error }) => {
           if (data) {
@@ -33,8 +41,11 @@ function App() {
               name: data.full_name,
               email: data.email,
               role: data.role as 'user' | 'admin',
-              joinedAt: data.created_at
+              joinedAt: data.created_at,
+              is_premium: data.is_premium
             };
+            setRequestCount(data.daily_requests_count || 0);
+            setLastRequestTime(data.last_request_timestamp);
             setProfile(updatedProfile);
             localStorage.setItem('est_safi_user_v2', JSON.stringify(updatedProfile));
           } else if (error) {
@@ -57,6 +68,11 @@ function App() {
     setShowLanding(true);
   };
 
+  const handleUpdateProfile = (updatedProfile: Profile) => {
+    setProfile(updatedProfile);
+    localStorage.setItem('est_safi_user_v2', JSON.stringify(updatedProfile));
+  };
+
   if (showLanding && !profile) {
     return <LandingPage onStart={() => setShowLanding(false)} />;
   }
@@ -68,10 +84,36 @@ function App() {
   return (
     <BrowserRouter>
       <div className="h-screen flex flex-col bg-slate-50 font-sans text-slate-900">
-        <Header profile={profile} onLogout={handleLogout} />
+        <Header
+          profile={profile}
+          onOpenProfile={() => setIsProfileOpen(true)}
+          onUpgrade={() => setIsPremiumModalOpen(true)}
+        />
+        <PremiumModal
+          isOpen={isPremiumModalOpen}
+          onClose={() => setIsPremiumModalOpen(false)}
+          userEmail={profile.email}
+          lastRequestTime={lastRequestTime}
+        />
+        <ProfileModal
+          isOpen={isProfileOpen}
+          onClose={() => setIsProfileOpen(false)}
+          profile={profile}
+          onLogout={handleLogout}
+          onUpdateProfile={handleUpdateProfile}
+        />
         <div className="flex flex-1 overflow-hidden">
           <Routes>
-            <Route path="/" element={<ChatLayout profile={profile} />} />
+            <Route path="/" element={<ChatLayout
+              profile={profile}
+              onLimitReached={() => setIsPremiumModalOpen(true)}
+              updateRequestState={(count, time) => {
+                setRequestCount(count);
+                setLastRequestTime(time);
+              }}
+              requestCount={requestCount}
+              lastRequestTime={lastRequestTime}
+            />} />
             <Route path="/admin" element={
               profile.role === 'admin' ? <AdminPanel /> : <Navigate to="/" />
             } />
@@ -82,10 +124,19 @@ function App() {
   );
 }
 
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}
+
 // =============================================
 // AUTHENTICATION SCREEN (EMAIL & PASSWORD)
 // =============================================
 const LoginScreen = ({ onAuthSuccess, onBack }: { onAuthSuccess: (p: Profile) => void, onBack: () => void }) => {
+  const { theme } = useTheme();
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -102,10 +153,8 @@ const LoginScreen = ({ onAuthSuccess, onBack }: { onAuthSuccess: (p: Profile) =>
     try {
       if (isRegistering) {
         // --- INSCRIPTION ---
-        // 1. Vérifier si l'email existe
         const { data: existing, error: checkError } = await supabase.from('users').select('id').eq('email', email).single();
 
-        // Ignore "Row not found" error (PGRST116) as it means we can proceed
         if (checkError && checkError.code !== 'PGRST116') {
           console.error("Check Error:", checkError);
           throw new Error("Erreur lors de la vérification de l'email.");
@@ -113,11 +162,10 @@ const LoginScreen = ({ onAuthSuccess, onBack }: { onAuthSuccess: (p: Profile) =>
 
         if (existing) throw new Error("Cet email possède déjà un compte.");
 
-        // 2. Créer l'utilisateur (Par défaut role = 'user')
         const { data, error: insertError } = await supabase.from('users').insert({
           full_name: fullName,
           email: email,
-          password: password, // Note: En prod, il faut hasher ce mot de passe !
+          password: password,
           role: 'user'
         }).select().single();
 
@@ -126,14 +174,14 @@ const LoginScreen = ({ onAuthSuccess, onBack }: { onAuthSuccess: (p: Profile) =>
           throw new Error("Erreur lors de la création du compte: " + insertError.message);
         }
 
-        // 3. Connexion automatique
         if (data) {
           onAuthSuccess({
             id: data.id,
             name: data.full_name,
             email: data.email,
             role: data.role as 'user' | 'admin',
-            joinedAt: data.created_at
+            joinedAt: data.created_at,
+            is_premium: false
           });
         }
 
@@ -141,7 +189,6 @@ const LoginScreen = ({ onAuthSuccess, onBack }: { onAuthSuccess: (p: Profile) =>
         // --- CONNEXION ---
         console.log("Attempting login for:", email);
 
-        // Vérifier Email + Password
         const { data, error } = await supabase
           .from('users')
           .select('*')
@@ -163,14 +210,16 @@ const LoginScreen = ({ onAuthSuccess, onBack }: { onAuthSuccess: (p: Profile) =>
 
         console.log("Login successful:", data.id);
 
-        // LE ROLE VIENT DE LA BDD (data.role)
         onAuthSuccess({
           id: data.id,
           name: data.full_name,
           email: data.email,
           role: data.role as 'user' | 'admin',
-          joinedAt: data.created_at
+          joinedAt: data.created_at,
+          is_premium: data.is_premium
         });
+        // We set dailyCount in the main component after auth callback usually, 
+        // but for now the useEffect refresh will handle it.
       }
     } catch (err: any) {
       console.error(err);
@@ -188,11 +237,11 @@ const LoginScreen = ({ onAuthSuccess, onBack }: { onAuthSuccess: (p: Profile) =>
 
       <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md animate-fade-in border border-slate-100">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center text-white mb-4 mx-auto shadow-lg shadow-emerald-200">
+          <div className={clsx("w-16 h-16 rounded-2xl flex items-center justify-center text-white mb-4 mx-auto shadow-lg", theme.primary, theme.shadow)}>
             <GraduationCap size={40} />
           </div>
           <h1 className="text-2xl font-bold text-slate-800">{isRegistering ? 'Nouveau Compte' : 'Bon retour !'}</h1>
-          <p className="text-slate-500">Connectez-vous pour accéder au Chatbot PFE.</p>
+          <p className="text-slate-500">Connectez-vous pour accéder au Chatbot YAFI.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -207,7 +256,8 @@ const LoginScreen = ({ onAuthSuccess, onBack }: { onAuthSuccess: (p: Profile) =>
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Ex: Ahmed Etudiant"
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className={clsx("w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 outline-none", `focus:ring-${theme.primary.split('-')[1]}-500`)}
+                  style={{ '--tw-ring-color': theme.primary.replace('bg-', 'var(--tw-colors-') } as React.CSSProperties}
                   required
                 />
               </div>
@@ -223,7 +273,8 @@ const LoginScreen = ({ onAuthSuccess, onBack }: { onAuthSuccess: (p: Profile) =>
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="nom@exemple.com"
-                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 outline-none"
+                style={{ '--tw-ring-color': theme.primary.replace('bg-', 'var(--tw-colors-') } as React.CSSProperties}
                 required
               />
             </div>
@@ -238,7 +289,8 @@ const LoginScreen = ({ onAuthSuccess, onBack }: { onAuthSuccess: (p: Profile) =>
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 outline-none"
+                style={{ '--tw-ring-color': theme.primary.replace('bg-', 'var(--tw-colors-') } as React.CSSProperties}
                 required
               />
             </div>
@@ -254,7 +306,7 @@ const LoginScreen = ({ onAuthSuccess, onBack }: { onAuthSuccess: (p: Profile) =>
           <button
             type="submit"
             disabled={loading}
-            className="w-full btn-primary flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed"
+            className={clsx("w-full flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed py-3 rounded-xl font-bold text-white transition-all", theme.primary, theme.shadow)}
           >
             {loading ? <Loader2 className="animate-spin" /> : (
               <>
@@ -267,7 +319,7 @@ const LoginScreen = ({ onAuthSuccess, onBack }: { onAuthSuccess: (p: Profile) =>
 
         <button
           onClick={() => { setIsRegistering(!isRegistering); setError(null); }}
-          className="w-full mt-6 text-sm text-center text-slate-500 hover:text-emerald-600 font-medium transition-colors"
+          className={clsx("w-full mt-6 text-sm text-center font-medium transition-colors text-slate-500 hover:text-slate-800")}
         >
           {isRegistering ? "J'ai déjà un compte ? Me connecter" : "Pas encore de compte ? M'inscrire"}
         </button>
@@ -280,11 +332,24 @@ const LoginScreen = ({ onAuthSuccess, onBack }: { onAuthSuccess: (p: Profile) =>
 // CHAT LAYOUT LOGIC
 // =============================================
 
-const ChatLayout = ({ profile }: { profile: Profile }) => {
+const ChatLayout = ({
+  profile,
+  onLimitReached,
+  updateRequestState,
+  requestCount,
+  lastRequestTime
+}: {
+  profile: Profile,
+  onLimitReached: () => void,
+  updateRequestState: (c: number, t: string) => void,
+  requestCount: number,
+  lastRequestTime: string | null
+}) => {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0); // Force sidebar refresh
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
 
   useEffect(() => {
     if (!currentSessionId) {
@@ -308,6 +373,27 @@ const ChatLayout = ({ profile }: { profile: Profile }) => {
   };
 
   const handleSendMessage = async (content: string) => {
+    // --- LIMIT CHECK (5 messages per 30 mins) ---
+    if (!profile.is_premium) {
+      const now = new Date();
+      const lastReq = lastRequestTime ? new Date(lastRequestTime) : new Date(0);
+      const timeDiff = now.getTime() - lastReq.getTime(); // diff in ms
+      const minutesDiff = timeDiff / (1000 * 60);
+
+      if (minutesDiff >= 30) {
+        // It's been more than 30 mins, reset counter
+        // Actually, we do this reset *after* sending successfully usually, 
+        // but for the check we can say: if > 30 mins, he is safe.
+        // We will set count to 1 after send.
+      } else {
+        // Less than 30 mins passed
+        if (requestCount >= 5) {
+          onLimitReached();
+          return;
+        }
+      }
+    }
+
     const tempUserMsg: Message = {
       id: crypto.randomUUID(),
       session_id: currentSessionId || 'temp',
@@ -321,13 +407,12 @@ const ChatLayout = ({ profile }: { profile: Profile }) => {
 
     try {
       let sessionId = currentSessionId;
-      // CREATE SESSION IF NEEDED
       if (!sessionId) {
         const { data: sessionData } = await supabase
           .from('sessions')
           .insert({
             title: content.slice(0, 30) + '...',
-            user_id: profile.id // Use REAL UUID now
+            user_id: profile.id
           })
           .select()
           .single();
@@ -335,7 +420,7 @@ const ChatLayout = ({ profile }: { profile: Profile }) => {
         if (sessionData) {
           sessionId = sessionData.id;
           setCurrentSessionId(sessionId);
-          setSidebarRefreshKey(prev => prev + 1); // Force sidebar to refresh
+          setSidebarRefreshKey(prev => prev + 1);
           console.log('New session created:', sessionId);
         } else {
           sessionId = crypto.randomUUID();
@@ -343,21 +428,42 @@ const ChatLayout = ({ profile }: { profile: Profile }) => {
         }
       }
 
-      // SAVE USER MSG (with error handling)
       if (sessionId) {
         const { error: saveError } = await supabase.from('messages').insert({
           session_id: sessionId,
           role: 'user',
           content
         });
-        if (saveError) {
-          console.error('Error saving user message:', saveError);
-        } else {
-          console.log('User message saved to session:', sessionId);
+        if (saveError) console.error('Error saving user message:', saveError);
+
+        // Increment count or reset if interval passed
+        if (!profile.is_premium) {
+          const now = new Date();
+          const lastReq = lastRequestTime ? new Date(lastRequestTime) : new Date(0);
+          const timeDiff = now.getTime() - lastReq.getTime();
+          const minutesDiff = timeDiff / (1000 * 60);
+
+          let newCount = requestCount + 1;
+
+          if (minutesDiff >= 30) {
+            newCount = 1; // Reset to 1 (this is the first new message of the block)
+          }
+
+          const newTimestamp = now.toISOString();
+
+          // Update State
+          updateRequestState(newCount, newTimestamp);
+
+          // Update DB
+          supabase.from('users').update({
+            daily_requests_count: newCount,
+            last_request_timestamp: newTimestamp
+          }).eq('id', profile.id).then(res => {
+            if (res.error) console.error("Error updating limit", res.error);
+          });
         }
       }
 
-      // CALL AI (Python + Prolog)
       const responseText = await apiService.sendMessage(messages, content, profile.id);
 
       const aiMsg: Message = {
@@ -370,18 +476,13 @@ const ChatLayout = ({ profile }: { profile: Profile }) => {
 
       setMessages(prev => [...prev, aiMsg]);
 
-      // SAVE AI MSG (with error handling)
       if (sessionId) {
         const { error: aiSaveError } = await supabase.from('messages').insert({
           session_id: sessionId,
           role: 'assistant',
           content: responseText
         });
-        if (aiSaveError) {
-          console.error('Error saving AI message:', aiSaveError);
-        } else {
-          console.log('AI message saved to session:', sessionId);
-        }
+        if (aiSaveError) console.error('Error saving AI message:', aiSaveError);
       }
 
     } catch (error: any) {
@@ -406,7 +507,7 @@ const ChatLayout = ({ profile }: { profile: Profile }) => {
   };
 
   return (
-    <>
+    <div className="flex flex-1 relative">
       <Sidebar
         currentSessionId={currentSessionId}
         onSelectSession={setCurrentSessionId}
@@ -420,8 +521,11 @@ const ChatLayout = ({ profile }: { profile: Profile }) => {
         onSendMessage={handleSendMessage}
         userName={profile.name}
       />
-    </>
+      <SuggestionsSidebar
+        isOpen={isRightSidebarOpen}
+        onToggle={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
+        onSendMessage={handleSendMessage}
+      />
+    </div>
   );
 };
-
-export default App;

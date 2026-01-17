@@ -4,6 +4,7 @@ export interface Profile {
     email: string;
     role: 'user' | 'admin';
     joinedAt: string;
+    is_premium?: boolean;
 }
 
 export interface Session {

@@ -1,41 +1,49 @@
 import React from 'react';
 import { ArrowRight, BookOpen, MessageSquare, ShieldCheck, GraduationCap } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
+import { clsx } from 'clsx';
 
 interface LandingPageProps {
     onStart: () => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
+    const { theme } = useTheme();
+
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-emerald-50 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+        <div className={clsx("min-h-screen bg-gradient-to-br flex flex-col items-center justify-center p-6 relative overflow-hidden", theme.gradient.replace('from-', 'from-slate-50 to-').split(' ')[1])}>
+            {/* Background elements */}
+            <div className="absolute inset-0 bg-slate-50 -z-20" />
+            <div className={clsx("absolute inset-0 opacity-10 bg-gradient-to-br", theme.gradient)} />
+
             {/* Background Decor */}
-            <div className="absolute top-20 left-20 w-64 h-64 bg-emerald-200/20 rounded-full blur-3xl animate-pulse" />
+            <div className={clsx("absolute top-20 left-20 w-64 h-64 rounded-full blur-3xl animate-pulse opacity-20", theme.primary)} />
             <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-200/20 rounded-full blur-3xl animate-pulse delay-1000" />
 
             <div className="max-w-4xl w-full bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/50 flex flex-col md:flex-row">
 
                 {/* Left Side: Visual & Brand */}
-                <div className="md:w-1/2 bg-emerald-800 p-12 text-white flex flex-col justify-between relative overflow-hidden">
+                <div className={clsx("md:w-1/2 p-12 text-white flex flex-col justify-between relative overflow-hidden", theme.primary)}>
                     <div className="relative z-10">
                         <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center mb-8 backdrop-blur-sm border border-white/20">
                             <GraduationCap size={40} className="text-white" />
                         </div>
-                        <h1 className="text-4xl font-bold mb-4 leading-tight">PFE Chatbot <br /><span className="text-emerald-300">EST Safi</span></h1>
-                        <p className="text-emerald-100/80 text-lg leading-relaxed">
+                        <h1 className="text-4xl font-bold mb-4 leading-tight">YAFI Chatbot <br /><span className="text-white/80">EST Safi</span></h1>
+                        <p className="text-white/80 text-lg leading-relaxed">
                             Une plateforme intelligente d'assistance éducative propulsée par l'Intelligence Artificielle.
                         </p>
                     </div>
 
                     <div className="relative z-10 mt-12 space-y-4">
-                        <div className="flex items-center gap-4 text-sm font-medium text-emerald-100">
+                        <div className="flex items-center gap-4 text-sm font-medium text-white/90">
                             <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"><BookOpen size={16} /></div>
                             <span>Base Documentaire RAG</span>
                         </div>
-                        <div className="flex items-center gap-4 text-sm font-medium text-emerald-100">
+                        <div className="flex items-center gap-4 text-sm font-medium text-white/90">
                             <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"><MessageSquare size={16} /></div>
                             <span>Assistance 24/7</span>
                         </div>
-                        <div className="flex items-center gap-4 text-sm font-medium text-emerald-100">
+                        <div className="flex items-center gap-4 text-sm font-medium text-white/90">
                             <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"><ShieldCheck size={16} /></div>
                             <span>Securité & Confidentialité</span>
                         </div>
@@ -65,7 +73,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
 
                     <button
                         onClick={onStart}
-                        className="group w-full py-4 bg-slate-900 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all shadow-lg hover:shadow-emerald-200 flex items-center justify-center gap-2"
+                        className={clsx(
+                            "group w-full py-4 text-white rounded-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2 bg-slate-900 hover:opacity-90",
+                            `hover:${theme.shadow}`
+                        )}
                     >
                         Accéder à la plateforme
                         <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
@@ -74,7 +85,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
 
             </div>
 
-            <p className="mt-8 text-slate-400 text-sm font-medium">© 2024 EST Safi - Projet PFE</p>
+            <p className="mt-8 text-slate-400 text-sm font-medium">© 2024 EST Safi - Projet YAFI</p>
         </div>
     );
 };
