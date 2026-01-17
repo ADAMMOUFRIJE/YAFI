@@ -1,6 +1,18 @@
 # 🚀 Guide de Démarrage Rapide - YAFI Chatbot
 
-## 1️⃣ Première Installation (Si vous venez de télécharger le projet)
+## 0️⃣ Prérequis (Installation par commande)
+
+Ouvrez un terminal (PowerShell ou CMD) en tant qu'administrateur et copiez cette commande pour tout installer d'un coup :
+
+```bash
+winget install -e --id OpenJS.NodeJS
+winget install -e --id Python.Python.3.11
+winget install -e --id SWI-Prolog.SWI-Prolog
+```
+
+*Une fois terminé, REDÉMARREZ votre terminal pour que les commandes soient prises en compte.*
+
+## 1️⃣ Première Installation (Après avoir téléchargé le projet)
 
 Suivez ces étapes UNIQUEMENT la première fois :
 
